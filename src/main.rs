@@ -41,9 +41,29 @@ struct Args {
     #[arg(short, long, default_value = "-1")]
     device: i32,
 
-    /// Architecture revision (old or new)
+    /// Architecture revision (old or new). Dependent on the model used.
     #[arg(short, long, value_enum, default_value = "new")]
     arch: ModelType,
+
+    /// Number of input channels. Dependent on the model used.
+    #[arg(long, default_value = "3")]
+    in_channels: usize,
+
+    /// Number of output channels. Dependent on the model used.
+    #[arg(long, default_value = "3")]
+    out_channels: usize,
+
+    /// Number of RRDB blocks. Dependent on the model used.
+    #[arg(long, default_value = "23")]
+    num_blocks: usize,
+
+    /// Number of features. Dependent on the model used.
+    #[arg(long, default_value = "64")]
+    num_features: usize,
+
+    /// Scale of the model. Dependent on the model used.
+    #[arg(short, long, default_value = "4")]
+    scale: usize,
 }
 
 fn img2tensor(img: DynamicImage, device: &Device) -> Tensor {
@@ -115,8 +135,30 @@ fn main() {
         unsafe { VarBuilder::from_mmaped_safetensors(&[model_path], DType::F32, &device).unwrap() };
 
     let model: ModelVariant = match args.arch {
-        ModelType::Old => ModelVariant::Old(OldESRGAN::load(vb, 3, 3, 4, 64, 23, 32).unwrap()),
-        ModelType::New => ModelVariant::New(RealESRGAN::load(vb, 3, 3, 4, 64, 23, 32).unwrap()),
+        ModelType::Old => ModelVariant::Old(
+            OldESRGAN::load(
+                vb,
+                args.in_channels,
+                args.out_channels,
+                args.scale,
+                args.num_features,
+                args.num_blocks,
+                32,
+            )
+            .unwrap(),
+        ),
+        ModelType::New => ModelVariant::New(
+            RealESRGAN::load(
+                vb,
+                args.in_channels,
+                args.out_channels,
+                args.scale,
+                args.num_features,
+                args.num_blocks,
+                32,
+            )
+            .unwrap(),
+        ),
     };
 
     let images_dir = args.input;
