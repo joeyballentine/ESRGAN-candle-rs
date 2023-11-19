@@ -9,6 +9,30 @@ use image::RgbImage;
 use new_arch::RRDBNet as RealESRGAN;
 use old_arch::RRDBNet as OldESRGAN;
 
+use clap::Parser;
+
+/// Simple program to greet a person
+#[derive(Parser, Debug)]
+#[command(author, version, about, long_about = None)]
+struct Args {
+    /// Path to the model file in safetensors format
+    #[arg(short, long)]
+    model: String,
+
+    /// Folder path containing images to upscale
+    #[arg(short, long)]
+    input: String,
+
+    /// Folder path to save upscaled images
+    #[arg(short, long)]
+    output: String,
+
+    /// Device to run the model on
+    /// -1 for CPU, 0 for GPU 0, 1 for GPU 1, etc.
+    #[arg(short, long, default_value = "-1")]
+    device: i32,
+}
+
 fn img2tensor(img: DynamicImage, device: &Device) -> Tensor {
     let height: usize = img.height() as usize;
     let width: usize = img.width() as usize;
@@ -57,22 +81,26 @@ fn process(model: &RealESRGAN, img: DynamicImage, device: &Device) -> RgbImage {
 }
 
 fn main() {
-    let device = Device::new_cuda(0).unwrap();
+    let args: Args = Args::parse();
 
-    let model_path = "model.safetensors";
+    let device = match args.device {
+        -1 => Device::Cpu,
+        _ => Device::new_cuda(args.device as usize).unwrap(),
+    };
+
+    let model_path = args.model;
 
     let vb =
         unsafe { VarBuilder::from_mmaped_safetensors(&[model_path], DType::F32, &device).unwrap() };
 
     let model = RealESRGAN::load(vb, 3, 3, 4, 64, 23, 32).unwrap();
 
-    let images_dir = r"path/to/images";
-    let out_dir = r"./rust-out";
+    let images_dir = args.input;
+    let out_dir = args.output;
 
-    if std::path::Path::new(out_dir).exists() {
-        std::fs::remove_dir_all(out_dir).unwrap();
+    if !std::path::Path::new(&out_dir).exists() {
+        std::fs::create_dir(&out_dir).unwrap();
     }
-    std::fs::create_dir(out_dir).unwrap();
 
     let files = std::fs::read_dir(images_dir).unwrap();
     let now = Instant::now();
