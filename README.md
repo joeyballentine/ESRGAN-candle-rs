@@ -20,4 +20,4 @@ Here is a basic usage example:
 
 The official RealESRGAN x4 model can be found [here](https://github.com/xinntao/Real-ESRGAN/releases/download/v0.1.0/RealESRGAN_x4plus.pth).
 
-Community trained models can be found [here](https://openmodeldb.info/?t=arch%3Aesrgan). Just note that many of these are trained with old-arch ESRGAN (you can swap out the code here to use OldESRGAN for these) and/or with different parameters (which are listed on the site and are easy to change in the code as well). Once candle allows more complex state_dict reading, I should be able to automate this process.
+Community trained models can be found [here](https://openmodeldb.info/?t=arch%3Aesrgan). Just note that many of these are trained with old-arch ESRGAN and/or with different parameters (which are listed on the site on each model's page). Once candle allows more complex state_dict reading, I should be able to automate this process, but for now these values can be changed with CLI args.
