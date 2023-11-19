@@ -4,12 +4,21 @@ use candle_core::{DType, Device, Tensor};
 use candle_nn::{Module, VarBuilder};
 mod new_arch;
 mod old_arch;
+use clap::ValueEnum;
 use image::DynamicImage;
 use image::RgbImage;
 use new_arch::RRDBNet as RealESRGAN;
 use old_arch::RRDBNet as OldESRGAN;
 
 use clap::Parser;
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
+enum ModelType {
+    /// Old-arch ESRGAN
+    Old,
+    /// New-arch ESRGAN (RealESRGAN)
+    New,
+}
 
 /// Simple program to greet a person
 #[derive(Parser, Debug)]
@@ -31,6 +40,10 @@ struct Args {
     /// -1 for CPU, 0 for GPU 0, 1 for GPU 1, etc.
     #[arg(short, long, default_value = "-1")]
     device: i32,
+
+    /// Architecture revision (old or new)
+    #[arg(short, long, value_enum, default_value = "new")]
+    arch: ModelType,
 }
 
 fn img2tensor(img: DynamicImage, device: &Device) -> Tensor {
@@ -67,11 +80,19 @@ fn tensor2img(tensor: Tensor) -> RgbImage {
     out_img
 }
 
-fn process(model: &RealESRGAN, img: DynamicImage, device: &Device) -> RgbImage {
+enum ModelVariant {
+    Old(OldESRGAN),
+    New(RealESRGAN),
+}
+
+fn process(model: &ModelVariant, img: DynamicImage, device: &Device) -> RgbImage {
     let img_t = img2tensor(img, &device);
 
     let now = Instant::now();
-    let result = model.forward(&img_t).unwrap();
+    let result = match model {
+        ModelVariant::Old(model) => model.forward(&img_t).unwrap(),
+        ModelVariant::New(model) => model.forward(&img_t).unwrap(),
+    };
     println!("Model took {:?}", now.elapsed());
 
     let result = (result.squeeze(0).unwrap().clamp(0., 1.).unwrap() * 255.).unwrap();
@@ -93,7 +114,10 @@ fn main() {
     let vb =
         unsafe { VarBuilder::from_mmaped_safetensors(&[model_path], DType::F32, &device).unwrap() };
 
-    let model = RealESRGAN::load(vb, 3, 3, 4, 64, 23, 32).unwrap();
+    let model: ModelVariant = match args.arch {
+        ModelType::Old => ModelVariant::Old(OldESRGAN::load(vb, 3, 3, 4, 64, 23, 32).unwrap()),
+        ModelType::New => ModelVariant::New(RealESRGAN::load(vb, 3, 3, 4, 64, 23, 32).unwrap()),
+    };
 
     let images_dir = args.input;
     let out_dir = args.output;
