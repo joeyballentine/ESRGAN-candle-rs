@@ -152,8 +152,7 @@ pub struct RRDBNet {
     conv_first: nn::Conv2d,
     body: Sequential,
     conv_body: nn::Conv2d,
-    conv_up1: nn::Conv2d,
-    conv_up2: nn::Conv2d,
+    conv_ups: Vec<nn::Conv2d>,
     conv_hr: nn::Conv2d,
     conv_last: nn::Conv2d,
     lrelu: nn::Activation,
@@ -188,17 +187,43 @@ impl RRDBNet {
             config,
             vb.pp(format!("model.1.sub.{num_blocks}")),
         );
-        let conv_up1 = nn::conv2d(num_feat, num_feat, 3, config, vb.pp("model.3"));
-        let conv_up2 = nn::conv2d(num_feat, num_feat, 3, config, vb.pp("model.6"));
-        let conv_hr = nn::conv2d(num_feat, num_feat, 3, config, vb.pp("model.8"));
-        let conv_last = nn::conv2d(num_feat, num_out_ch, 3, config, vb.pp("model.10"));
+        let mut layer_start_num = 0;
+        let num_ups = (scale as f32).log2() as usize;
+        let mut conv_ups: Vec<nn::Conv2d> = vec![];
+
+        (0..num_ups).for_each(|_| {
+            layer_start_num += 3;
+            conv_ups.push(
+                nn::conv2d(
+                    num_feat,
+                    num_feat,
+                    3,
+                    config,
+                    vb.pp(format!("model.{layer_start_num}")),
+                )
+                .unwrap(),
+            );
+        });
+        let conv_hr = nn::conv2d(
+            num_feat,
+            num_feat,
+            3,
+            config,
+            vb.pp(format!("model.{i}", i = layer_start_num + 2)),
+        );
+        let conv_last = nn::conv2d(
+            num_feat,
+            num_out_ch,
+            3,
+            config,
+            vb.pp(format!("model.{i}", i = layer_start_num + 4)),
+        );
         let lrelu = nn::Activation::LeakyRelu(0.2);
         Ok(Self {
             conv_first: conv_first.unwrap(),
             body,
             conv_body: conv_body.unwrap(),
-            conv_up1: conv_up1.unwrap(),
-            conv_up2: conv_up2.unwrap(),
+            conv_ups: conv_ups,
             conv_hr: conv_hr.unwrap(),
             conv_last: conv_last.unwrap(),
             lrelu,
@@ -211,12 +236,11 @@ impl nn::Module for RRDBNet {
         let mut feat = self.conv_first.forward(xs)?;
         let body_feat = self.conv_body.forward(&self.body.forward(&feat)?)?;
         feat = (feat + body_feat)?;
-        feat = self
-            .lrelu
-            .forward(&self.conv_up1.forward(&Upsample::new(2)?.forward(&feat)?)?)?;
-        feat = self
-            .lrelu
-            .forward(&self.conv_up2.forward(&Upsample::new(2)?.forward(&feat)?)?)?;
+        for conv_up in &self.conv_ups {
+            feat = self
+                .lrelu
+                .forward(&conv_up.forward(&Upsample::new(2)?.forward(&feat)?)?)?;
+        }
         let out = self
             .conv_last
             .forward(&self.lrelu.forward(&self.conv_hr.forward(&feat)?)?)?;
