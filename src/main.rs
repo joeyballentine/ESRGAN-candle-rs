@@ -4,11 +4,13 @@ use candle_core::{DType, Device, Tensor};
 use candle_nn::{Module, VarBuilder};
 mod new_arch;
 mod old_arch;
+use candle_core::safetensors::load;
 use clap::ValueEnum;
 use image::DynamicImage;
 use image::RgbImage;
 use new_arch::RRDBNet as RealESRGAN;
 use old_arch::RRDBNet as OldESRGAN;
+use std::path::Path;
 
 use clap::Parser;
 
@@ -42,8 +44,8 @@ struct Args {
     device: i32,
 
     /// Architecture revision (old or new). Dependent on the model used.
-    #[arg(short, long, value_enum, default_value = "new")]
-    arch: ModelType,
+    #[arg(short, long, value_enum)]
+    arch: Option<ModelType>,
 
     /// Number of input channels. Dependent on the model used.
     #[arg(long, default_value = "3")]
@@ -129,12 +131,24 @@ fn main() {
         _ => Device::new_cuda(args.device as usize).unwrap(),
     };
 
-    let model_path = args.model;
+    let model_path = args.model.clone();
 
     let vb =
         unsafe { VarBuilder::from_mmaped_safetensors(&[model_path], DType::F32, &device).unwrap() };
 
-    let model: ModelVariant = match args.arch {
+    let state_dict = load(Path::new(&args.model), &device).unwrap();
+
+    // println!("{:?}", state_dict.keys().collect::<Vec<_>>());
+
+    let model_arch =
+        args.arch
+            .unwrap_or(if state_dict.keys().any(|x| x.contains("model.0.weight")) {
+                ModelType::Old
+            } else {
+                ModelType::New
+            });
+
+    let model: ModelVariant = match model_arch {
         ModelType::Old => ModelVariant::Old(
             OldESRGAN::load(
                 vb,
