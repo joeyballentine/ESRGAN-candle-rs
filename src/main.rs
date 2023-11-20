@@ -11,6 +11,8 @@ use image::RgbImage;
 use new_arch::RRDBNet as RealESRGAN;
 use old_arch::RRDBNet as OldESRGAN;
 use std::path::Path;
+mod old_arch_helpers;
+use old_arch_helpers::get_scale;
 
 use clap::Parser;
 
@@ -64,8 +66,8 @@ struct Args {
     num_features: usize,
 
     /// Scale of the model. Dependent on the model used.
-    #[arg(short, long, default_value = "4")]
-    scale: usize,
+    #[arg(short, long)]
+    scale: Option<usize>,
 }
 
 fn img2tensor(img: DynamicImage, device: &Device) -> Tensor {
@@ -154,7 +156,7 @@ fn main() {
                 vb,
                 args.in_channels,
                 args.out_channels,
-                args.scale,
+                args.scale.unwrap_or(get_scale(state_dict)),
                 args.num_features,
                 args.num_blocks,
                 32,
@@ -166,7 +168,7 @@ fn main() {
                 vb,
                 args.in_channels,
                 args.out_channels,
-                args.scale,
+                args.scale.unwrap_or(4),
                 args.num_features,
                 args.num_blocks,
                 32,
