@@ -1,6 +1,6 @@
 use std::time::Instant;
 
-use candle_core::{DType, Device, Tensor};
+use candle_core::{pickle, DType, Device, Tensor};
 use candle_nn::{Module, VarBuilder};
 mod new_arch;
 mod old_arch;
@@ -133,14 +133,19 @@ fn main() {
         _ => Device::new_cuda(args.device as usize).unwrap(),
     };
 
-    let model_path = args.model.clone();
+    let path_extension = Path::new(&args.model)
+        .extension()
+        .unwrap()
+        .to_str()
+        .unwrap();
 
-    let vb =
-        unsafe { VarBuilder::from_mmaped_safetensors(&[model_path], DType::F32, &device).unwrap() };
+    let state_dict = match path_extension {
+        "safetensors" => load(&args.model, &device).unwrap(),
+        "pth" => pickle::read_all(&args.model).unwrap().into_iter().collect(),
+        _ => panic!("Invalid model file extension"),
+    };
 
-    let state_dict = load(Path::new(&args.model), &device).unwrap();
-
-    // println!("{:?}", state_dict.keys().collect::<Vec<_>>());
+    let vb = { VarBuilder::from_tensors(state_dict.clone(), DType::F32, &device) };
 
     let model_arch =
         args.arch
