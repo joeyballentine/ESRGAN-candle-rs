@@ -30,11 +30,33 @@ pub fn get_out_nc(state_dict: &HashMap<String, Tensor>) -> usize {
         .filter(|x| x.contains("model."))
         .map(|x| x.split(".").collect::<Vec<&str>>()[1])
         .map(|y| y.parse::<usize>().unwrap())
-        .max()
-        .unwrap();
-    return state_dict
-        .get(&format!("model.{highest_layer_num}.weight"))
-        .unwrap()
-        .shape()
-        .dims()[0];
+        .max();
+    return match highest_layer_num {
+        Some(x) => state_dict
+            .get(&format!("model.{x}.weight"))
+            .unwrap()
+            .shape()
+            .dims()[0],
+        None => 3,
+    };
+}
+
+pub fn get_nf(state_dict: &HashMap<String, Tensor>) -> usize {
+    return match state_dict.get("model.0.weight") {
+        Some(x) => x.shape().dims()[0],
+        None => 64,
+    };
+}
+
+pub fn get_nb(state_dict: &HashMap<String, Tensor>) -> usize {
+    let highest_layer_num = state_dict
+        .keys()
+        .filter(|x| x.contains("model.1.sub."))
+        .map(|x| x.split(".").collect::<Vec<&str>>()[3])
+        .map(|y| y.parse::<usize>().unwrap())
+        .max();
+    return match highest_layer_num {
+        Some(x) => x,
+        None => 23,
+    };
 }

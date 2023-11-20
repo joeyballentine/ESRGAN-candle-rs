@@ -12,7 +12,7 @@ use new_arch::RRDBNet as RealESRGAN;
 use old_arch::RRDBNet as OldESRGAN;
 use std::path::Path;
 mod old_arch_helpers;
-use old_arch_helpers::{get_in_nc, get_out_nc, get_scale};
+use old_arch_helpers::{get_in_nc, get_nb, get_nf, get_out_nc, get_scale};
 
 use clap::Parser;
 
@@ -58,12 +58,12 @@ struct Args {
     out_channels: Option<usize>,
 
     /// Number of RRDB blocks. Dependent on the model used.
-    #[arg(long, default_value = "23")]
-    num_blocks: usize,
+    #[arg(long)]
+    num_blocks: Option<usize>,
 
     /// Number of features. Dependent on the model used.
-    #[arg(long, default_value = "64")]
-    num_features: usize,
+    #[arg(long)]
+    num_features: Option<usize>,
 
     /// Scale of the model. Dependent on the model used.
     #[arg(short, long)]
@@ -157,8 +157,8 @@ fn main() {
                 args.in_channels.unwrap_or(get_in_nc(&state_dict)),
                 args.out_channels.unwrap_or(get_out_nc(&state_dict)),
                 args.scale.unwrap_or(get_scale(&state_dict)),
-                args.num_features,
-                args.num_blocks,
+                args.num_features.unwrap_or(get_nf(&state_dict)),
+                args.num_blocks.unwrap_or(get_nb(&state_dict)),
                 32,
             )
             .unwrap(),
@@ -169,8 +169,8 @@ fn main() {
                 args.in_channels.unwrap_or(3),
                 args.out_channels.unwrap_or(3),
                 args.scale.unwrap_or(4),
-                args.num_features,
-                args.num_blocks,
+                args.num_features.unwrap_or(64),
+                args.num_blocks.unwrap_or(23),
                 32,
             )
             .unwrap(),
