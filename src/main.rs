@@ -12,7 +12,7 @@ use new_arch::RRDBNet as RealESRGAN;
 use old_arch::RRDBNet as OldESRGAN;
 use std::path::Path;
 mod old_arch_helpers;
-use old_arch_helpers::{get_in_nc, get_scale};
+use old_arch_helpers::{get_in_nc, get_out_nc, get_scale};
 
 use clap::Parser;
 
@@ -54,8 +54,8 @@ struct Args {
     in_channels: Option<usize>,
 
     /// Number of output channels. Dependent on the model used.
-    #[arg(long, default_value = "3")]
-    out_channels: usize,
+    #[arg(long)]
+    out_channels: Option<usize>,
 
     /// Number of RRDB blocks. Dependent on the model used.
     #[arg(long, default_value = "23")]
@@ -155,7 +155,7 @@ fn main() {
             OldESRGAN::load(
                 vb,
                 args.in_channels.unwrap_or(get_in_nc(&state_dict)),
-                args.out_channels,
+                args.out_channels.unwrap_or(get_out_nc(&state_dict)),
                 args.scale.unwrap_or(get_scale(&state_dict)),
                 args.num_features,
                 args.num_blocks,
@@ -167,7 +167,7 @@ fn main() {
             RealESRGAN::load(
                 vb,
                 args.in_channels.unwrap_or(3),
-                args.out_channels,
+                args.out_channels.unwrap_or(3),
                 args.scale.unwrap_or(4),
                 args.num_features,
                 args.num_blocks,

@@ -1,6 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
 use candle_core::Tensor;
+use std::format;
 
 pub fn get_scale(state_dict: &HashMap<String, Tensor>) -> usize {
     // The idea is pretty simple: model.0 and model.1 are always present
@@ -21,4 +22,19 @@ pub fn get_in_nc(state_dict: &HashMap<String, Tensor>) -> usize {
         Some(x) => x.shape().dims()[1],
         None => 3,
     };
+}
+
+pub fn get_out_nc(state_dict: &HashMap<String, Tensor>) -> usize {
+    let highest_layer_num = state_dict
+        .keys()
+        .filter(|x| x.contains("model."))
+        .map(|x| x.split(".").collect::<Vec<&str>>()[1])
+        .map(|y| y.parse::<usize>().unwrap())
+        .max()
+        .unwrap();
+    return state_dict
+        .get(&format!("model.{highest_layer_num}.weight"))
+        .unwrap()
+        .shape()
+        .dims()[0];
 }
