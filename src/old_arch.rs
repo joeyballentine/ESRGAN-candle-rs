@@ -1,4 +1,4 @@
-use candle_core::{Result, Tensor};
+use candle_core::{Module, Result, Tensor};
 use candle_nn as nn;
 
 #[derive(Debug)]
@@ -126,31 +126,70 @@ impl nn::Module for RRDB {
     }
 }
 
+// #[derive(Debug)]
+// struct Sequential {
+//     modules: Vec<RRDB>,
+// }
+
+// impl Sequential {
+//     fn new(modules: Vec<RRDB>) -> Self {
+//         Self { modules }
+//     }
+// }
+
+// impl nn::Module for Sequential {
+//     fn forward(&self, xs: &Tensor) -> Result<Tensor> {
+//         let mut out = xs.clone();
+//         for module in &self.modules {
+//             out = module.forward(&out)?;
+//         }
+//         Ok(out)
+//     }
+// }
+
+// Taken from https://github.com/huggingface/candle/issues/1113
 #[derive(Debug)]
-struct Sequential {
-    modules: Vec<RRDB>,
+pub struct Sequential<T: Module> {
+    layers: Vec<T>,
 }
 
-impl Sequential {
-    fn new(modules: Vec<RRDB>) -> Self {
-        Self { modules }
+pub fn seq<T: Module>() -> Sequential<T> {
+    Sequential { layers: vec![] }
+}
+
+impl<T: Module> Sequential<T> {
+    pub fn len(&self) -> usize {
+        self.layers.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.layers.is_empty()
+    }
+
+    pub fn add(&mut self, layer: T) {
+        self.layers.push(layer);
     }
 }
 
-impl nn::Module for Sequential {
-    fn forward(&self, xs: &Tensor) -> Result<Tensor> {
-        let mut out = xs.clone();
-        for module in &self.modules {
-            out = module.forward(&out)?;
+impl<T: Module> Module for Sequential<T> {
+    fn forward(&self, xs: &candle_core::Tensor) -> Result<candle_core::Tensor> {
+        if self.layers.is_empty() {
+            Ok(xs.clone())
+        } else {
+            let xs = self.layers[0].forward(xs)?;
+            // println!("base_block:{xs}");
+            self.layers
+                .iter()
+                .skip(1)
+                .try_fold(xs, |xs, layer| layer.forward(&xs))
         }
-        Ok(out)
     }
 }
 
 #[derive(Debug)]
 pub struct RRDBNet {
     conv_first: nn::Conv2d,
-    body: Sequential,
+    body: Sequential<RRDB>,
     conv_body: nn::Conv2d,
     conv_ups: Vec<nn::Conv2d>,
     conv_hr: nn::Conv2d,
@@ -175,11 +214,14 @@ impl RRDBNet {
             groups: 1,
         };
         let conv_first = nn::conv2d(num_in_ch, num_feat, 3, config, vb.pp("model.0"));
-        let body = Sequential {
-            modules: (0..num_blocks)
-                .map(|i| RRDB::load(vb.pp(format!("model.1.sub.{i}")), num_feat, num_grow_ch))
-                .collect::<Result<Vec<_>>>()?,
-        };
+        let mut body = seq();
+        for i in 0..num_blocks {
+            body.add(RRDB::load(
+                vb.pp(format!("model.1.sub.{i}")),
+                num_feat,
+                num_grow_ch,
+            )?)
+        }
         let conv_body = nn::conv2d(
             num_feat,
             num_feat,
