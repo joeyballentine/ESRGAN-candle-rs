@@ -6,6 +6,7 @@ mod new_arch;
 mod old_arch;
 use candle_core::safetensors::load;
 use clap::ValueEnum;
+use compact::SRVGGNetCompact as Compact;
 use image::DynamicImage;
 use image::RgbImage;
 use new_arch::RRDBNet as RealESRGAN;
@@ -13,6 +14,7 @@ use old_arch::RRDBNet as OldESRGAN;
 use std::path::Path;
 mod old_arch_helpers;
 use old_arch_helpers::{get_in_nc, get_nb, get_nf, get_out_nc, get_scale};
+mod compact;
 
 use clap::Parser;
 
@@ -22,6 +24,8 @@ enum ModelType {
     Old,
     /// New-arch ESRGAN (RealESRGAN)
     New,
+    // RealESRGANv2 aka Compact
+    Compact,
 }
 
 /// Simple program to greet a person
@@ -68,9 +72,13 @@ struct Args {
     /// Scale of the model. Dependent on the model used.
     #[arg(short, long)]
     scale: Option<usize>,
+
+    /// Run the model with half precision (fp16)
+    #[arg(long)]
+    half: bool,
 }
 
-fn img2tensor(img: DynamicImage, device: &Device) -> Tensor {
+fn img2tensor(img: DynamicImage, device: &Device, half: bool) -> Tensor {
     let height: usize = img.height() as usize;
     let width: usize = img.width() as usize;
     let data = img.to_rgb8().into_raw();
@@ -78,7 +86,13 @@ fn img2tensor(img: DynamicImage, device: &Device) -> Tensor {
         .unwrap()
         .permute((2, 0, 1))
         .unwrap();
-    let image_t = (tensor.unsqueeze(0).unwrap().to_dtype(DType::F32).unwrap() / 255.).unwrap();
+    let image_t = (tensor
+        .unsqueeze(0)
+        .unwrap()
+        .to_dtype(if half { DType::F16 } else { DType::F32 })
+        .unwrap()
+        / 255.)
+        .unwrap();
     return image_t;
 }
 
@@ -90,9 +104,9 @@ fn tensor2img(tensor: Tensor) -> RgbImage {
         .unwrap()
         .detach()
         .unwrap()
-        .to_device(&cpu)
-        .unwrap()
         .to_dtype(DType::U8)
+        .unwrap()
+        .to_device(&cpu)
         .unwrap();
 
     let dims = result.dims();
@@ -107,15 +121,17 @@ fn tensor2img(tensor: Tensor) -> RgbImage {
 enum ModelVariant {
     Old(OldESRGAN),
     New(RealESRGAN),
+    Compact(Compact),
 }
 
-fn process(model: &ModelVariant, img: DynamicImage, device: &Device) -> RgbImage {
-    let img_t = img2tensor(img, &device);
+fn process(model: &ModelVariant, img: DynamicImage, device: &Device, half: bool) -> RgbImage {
+    let img_t = img2tensor(img, &device, half);
 
     let now = Instant::now();
     let result = match model {
         ModelVariant::Old(model) => model.forward(&img_t).unwrap(),
         ModelVariant::New(model) => model.forward(&img_t).unwrap(),
+        ModelVariant::Compact(model) => model.forward(&img_t).unwrap(),
     };
     println!("Model took {:?}", now.elapsed());
 
@@ -145,7 +161,13 @@ fn main() {
         _ => panic!("Invalid model file extension"),
     };
 
-    let vb = { VarBuilder::from_tensors(state_dict.clone(), DType::F32, &device) };
+    let vb = {
+        VarBuilder::from_tensors(
+            state_dict.clone(),
+            if args.half { DType::F16 } else { DType::F32 },
+            &device,
+        )
+    };
 
     let model_arch =
         args.arch
@@ -180,6 +202,17 @@ fn main() {
             )
             .unwrap(),
         ),
+        ModelType::Compact => ModelVariant::Compact(
+            Compact::load(
+                vb,
+                args.in_channels.unwrap_or(3),
+                args.out_channels.unwrap_or(3),
+                args.num_features.unwrap_or(64),
+                args.num_blocks.unwrap_or(23),
+                args.scale.unwrap_or(4),
+            )
+            .unwrap(),
+        ),
     };
 
     let images_dir = args.input;
@@ -196,7 +229,7 @@ fn main() {
         let path = file.path();
         let img = image::open(path).unwrap();
 
-        let out_img = process(&model, img, &device);
+        let out_img = process(&model, img, &device, args.half);
 
         let out_path = format!("{}/{}", out_dir, file.file_name().into_string().unwrap());
         out_img.save(out_path).unwrap();
