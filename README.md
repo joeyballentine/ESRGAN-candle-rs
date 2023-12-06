@@ -2,7 +2,7 @@
 
 ESRGAN implemented in rust with candle.
 
-This was an experiment I did to try out the candle library and compare it with pytorch using a model architecture I'm very familiar with. I implemented both the standard ESRGAN arch as well as the RealESRGAN version with the different key names.
+This was an experiment I did to try out the candle library and compare it with pytorch using a model architecture I'm very familiar with. I implemented both the standard ESRGAN arch as well as both the RealESRGAN version with the different key names and the RealESRGANv2 SRVGGCompact arch (aka Compact).
 
 It ended up being slower in general than pytorch, and I created an issue in the candle repository as a result. This repo is just to share that code.
 
