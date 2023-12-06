@@ -98,7 +98,7 @@ impl SRVGGNetCompact {
             // ActType::PReLU =>
             body.add(LayerType::PReLU(nn::prelu(
                 Option::from(num_feat),
-                vb.pp(&format!("body.{}", 2 * i + 1)),
+                vb.pp(&format!("body.{}", 2 * i + 3)),
             )?));
             // _ => {}
             // ActType::LeakyReLU => body.add(nn::Activation::LeakyRelu(0.1)),
@@ -118,11 +118,11 @@ impl SRVGGNetCompact {
 
 impl nn::Module for SRVGGNetCompact {
     fn forward(&self, xs: &Tensor) -> Result<Tensor> {
+        let (_b_size, _channels, h, w) = xs.dims4()?;
         let out = self.body.forward(xs)?;
         let out = nn::ops::pixel_shuffle(&out, self.upscale)?;
-        let (_b_size, _channels, h, w) = xs.dims4()?;
         let base = xs.upsample_nearest2d(self.upscale * h, self.upscale * w)?;
-        let result = (base + out)?;
-        Ok(result)
+        let out = (base + out)?;
+        Ok(out)
     }
 }
